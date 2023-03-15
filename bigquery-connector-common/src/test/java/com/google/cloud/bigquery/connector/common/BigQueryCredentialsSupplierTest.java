@@ -19,7 +19,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 
 import com.google.api.client.json.GenericJson;
-import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.client.json.gson.GsonFactory;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
@@ -71,6 +71,7 @@ public class BigQueryCredentialsSupplierTest {
     Credentials nonProxyCredentials =
         new BigQueryCredentialsSupplier(
                 Optional.empty(),
+                Optional.empty(),
                 Optional.of(ACCESS_TOKEN),
                 Optional.empty(),
                 Optional.empty(),
@@ -81,6 +82,7 @@ public class BigQueryCredentialsSupplierTest {
 
     Credentials proxyCredentials =
         new BigQueryCredentialsSupplier(
+                Optional.empty(),
                 Optional.empty(),
                 Optional.of(ACCESS_TOKEN),
                 Optional.empty(),
@@ -111,6 +113,7 @@ public class BigQueryCredentialsSupplierTest {
         new BigQueryCredentialsSupplier(
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 Optional.of(credentialsKey),
                 Optional.empty(),
                 Optional.empty(),
@@ -120,6 +123,7 @@ public class BigQueryCredentialsSupplierTest {
 
     Credentials proxyCredentials =
         new BigQueryCredentialsSupplier(
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.of(credentialsKey),
@@ -156,6 +160,7 @@ public class BigQueryCredentialsSupplierTest {
                 new BigQueryCredentialsSupplier(
                         Optional.empty(),
                         Optional.empty(),
+                        Optional.empty(),
                         Optional.of(credentialsKey),
                         Optional.empty(),
                         optionalProxyURI,
@@ -168,6 +173,7 @@ public class BigQueryCredentialsSupplierTest {
             IllegalArgumentException.class,
             () ->
                 new BigQueryCredentialsSupplier(
+                        Optional.empty(),
                         Optional.empty(),
                         Optional.empty(),
                         Optional.of(credentialsKey),
@@ -199,6 +205,7 @@ public class BigQueryCredentialsSupplierTest {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 Optional.of(credentialsFile.getAbsolutePath()),
                 Optional.empty(),
                 Optional.empty(),
@@ -207,6 +214,7 @@ public class BigQueryCredentialsSupplierTest {
 
     Credentials proxyCredentials =
         new BigQueryCredentialsSupplier(
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
@@ -245,6 +253,7 @@ public class BigQueryCredentialsSupplierTest {
                         Optional.empty(),
                         Optional.empty(),
                         Optional.empty(),
+                        Optional.empty(),
                         Optional.of(credentialsFile.getAbsolutePath()),
                         optionalProxyURI,
                         Optional.empty(),
@@ -256,6 +265,7 @@ public class BigQueryCredentialsSupplierTest {
             IllegalArgumentException.class,
             () ->
                 new BigQueryCredentialsSupplier(
+                        Optional.empty(),
                         Optional.empty(),
                         Optional.empty(),
                         Optional.empty(),
@@ -277,7 +287,7 @@ public class BigQueryCredentialsSupplierTest {
 
   private String createServiceAccountJson(String projectId) throws Exception {
     GenericJson json = new GenericJson();
-    json.setFactory(JacksonFactory.getDefaultInstance());
+    json.setFactory(GsonFactory.getDefaultInstance());
     json.put("type", TYPE);
     json.put("client_id", CLIENT_ID);
     json.put("client_email", CLIENT_EMAIL);
@@ -292,6 +302,7 @@ public class BigQueryCredentialsSupplierTest {
   public void testFallbackToDefault() throws Exception {
     BigQueryCredentialsSupplier supplier =
         new BigQueryCredentialsSupplier(
+            Optional.empty(),
             Optional.empty(),
             Optional.empty(),
             Optional.empty(),
@@ -313,6 +324,7 @@ public class BigQueryCredentialsSupplierTest {
                   Optional.empty(),
                   Optional.empty(),
                   Optional.empty(),
+                  Optional.empty(),
                   Optional.of("/no/such/file"),
                   Optional.empty(),
                   Optional.empty(),
@@ -329,6 +341,7 @@ public class BigQueryCredentialsSupplierTest {
             UncheckedIOException.class,
             () -> {
               new BigQueryCredentialsSupplier(
+                  Optional.empty(),
                   Optional.empty(),
                   Optional.empty(),
                   Optional.of("bm8ga2V5IGhlcmU="), // "no key here"

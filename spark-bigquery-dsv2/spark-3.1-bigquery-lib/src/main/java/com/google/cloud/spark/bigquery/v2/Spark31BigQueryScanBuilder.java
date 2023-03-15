@@ -32,12 +32,14 @@ import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns;
 import org.apache.spark.sql.connector.read.SupportsReportStatistics;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.types.StructType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Both Scan and ScanBuilder implementation, otherwise estimateStatistics() is not called due to bug
  * in DataSourceV2Relation
  */
-public class BigQueryScanBuilder
+public class Spark31BigQueryScanBuilder
     implements Batch,
         Scan,
         ScanBuilder,
@@ -46,10 +48,12 @@ public class BigQueryScanBuilder
         SupportsReportStatistics,
         SupportsQueryPushdown {
 
-  private BigQueryDataSourceReaderContext ctx;
-  private InputPartition[] partitions;
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public BigQueryScanBuilder(BigQueryDataSourceReaderContext ctx) {
+  protected BigQueryDataSourceReaderContext ctx;
+  protected InputPartition[] partitions;
+
+  public Spark31BigQueryScanBuilder(BigQueryDataSourceReaderContext ctx) {
     this.ctx = ctx;
   }
 
@@ -64,12 +68,16 @@ public class BigQueryScanBuilder
 
   @Override
   public Filter[] pushFilters(Filter[] filters) {
-    return ctx.pushFilters(filters);
+    ctx.pushFilters(filters);
+    // We tell Spark that all filters were unhandled, in order to trigger DPP if needed
+    // The relevant filters (usually all of them) where pushed to the Read API by `ctx`
+    return filters;
   }
 
   @Override
   public Filter[] pushedFilters() {
-    return ctx.pushedFilters();
+    // We tell Spark that all filters were pushable, in order to trigger bloom filter if needed
+    return ctx.getAllFilters();
   }
 
   @Override
@@ -119,7 +127,7 @@ public class BigQueryScanBuilder
       return false;
     }
 
-    BigQueryScanBuilder that = (BigQueryScanBuilder) o;
+    Spark31BigQueryScanBuilder that = (Spark31BigQueryScanBuilder) o;
     return getTableId().equals(that.getTableId())
         && readSchema().equals(that.readSchema())
         && // compare Spark schemas to ignore field ids

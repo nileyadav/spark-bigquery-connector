@@ -47,7 +47,11 @@ public class DataprocServerlessAcceptanceTestBase {
           .substring(0, getClass().getSimpleName().length() - 32)
           .toLowerCase(Locale.ENGLISH);
   String testId = String.format("%s-%s", testName, System.currentTimeMillis());
-  AcceptanceTestContext context = new AcceptanceTestContext(testId, generateClusterName(testId));
+  String testBaseGcsDir = AcceptanceTestUtils.createTestBaseGcsDir(testId);
+  String connectorJarUri = testBaseGcsDir + "/connector.jar";
+  AcceptanceTestContext context =
+      new AcceptanceTestContext(
+          testId, generateClusterName(testId), testBaseGcsDir, connectorJarUri);
 
   private final String connectorJarPrefix;
   private final String s8sImageVersion;
@@ -81,8 +85,7 @@ public class DataprocServerlessAcceptanceTestBase {
       String testName,
       String pythonFile,
       String pythonZipUri,
-      List<String> args,
-      long durationInSeconds)
+      List<String> args)
       throws Exception {
     AcceptanceTestUtils.uploadToGcs(
         DataprocServerlessAcceptanceTestBase.class.getResourceAsStream("/acceptance/" + pythonFile),
@@ -111,7 +114,10 @@ public class DataprocServerlessAcceptanceTestBase {
                 .setBatchId(context.clusterId)
                 .setBatch(batch)
                 .build());
-    return batchAsync.getPollingFuture().get(durationInSeconds, TimeUnit.SECONDS);
+
+    return batchAsync
+        .getPollingFuture()
+        .get(AcceptanceTestConstants.SERVERLESS_BATCH_TIMEOUT_IN_SECONDS, TimeUnit.SECONDS);
   }
 
   protected PySparkBatch.Builder createPySparkBatchBuilder(

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,14 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.cloud.spark.bigquery.integration;
+package com.google.cloud.spark.bigquery.v2;
 
-public class Spark33ReadByFormatIntegrationTest extends ReadByFormatIntegrationTestBase {
+import com.google.cloud.spark.bigquery.v2.context.BigQueryDataSourceReaderContext;
 
-  public Spark33ReadByFormatIntegrationTest() {
-    super("ARROW", /* userProvidedSchemaAllowed */ false);
+public class Spark33BigQueryScanBuilder extends Spark32BigQueryScanBuilder {
+  public Spark33BigQueryScanBuilder(BigQueryDataSourceReaderContext ctx) {
+    super(ctx);
   }
-
-  // tests are from the super-class
-
 }

@@ -2,7 +2,28 @@
 
 ## Next
 
+* Issue #522: Supporting Spark's Map type. Notice there are few restrictions as this is not a
+  BigQuery native type.
+
+## 0.29.0 - 2023-03-03
+
+* Added two new connectors, `spark-3.2-bigquery` and `spark-3.3-bigquery` aimed to be used in Spark 3.2 and 3.3
+  respectively. Those connectors implement new APIs and capabilities provided by the Spark Data Source V2 API. Both
+  connectors are in preview mode.
+* Dynamic partition pruning is supported in preview mode by `spark-3.2-bigquery` and `spark-3.3-bigquery`.
+* This is the last version of the Spark BigQuery connector for scala 2.11. The code will remain in the repository and
+  can be compiled into a connector if needed.
 * PR #857: Fixing `autovalue` shaded classes repackaging
+* BigQuery API has been upgraded to version 2.22.0
+* BigQuery Storage API has been upgraded to version 2.31.0
+* GAX has been upgraded to version 2.23.0
+* gRPC has been upgraded to version 1.53.0
+* Netty has been upgraded to version 4.1.89.Final
+* Issue #908: Making sure that `preferred_min_stream_count` must be less than or equal to `max_stream_count`
+
+## 0.28.1 - 2023-02-27
+
+PR #904: Fixing premature client closing in certain cases, which causes RejectedExecutionException to be thrown
 
 ## 0.28.0 - 2023-01-09
 

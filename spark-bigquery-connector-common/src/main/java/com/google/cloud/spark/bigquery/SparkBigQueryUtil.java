@@ -20,6 +20,7 @@ import static com.google.cloud.bigquery.connector.common.BigQueryConfigurationUt
 
 import com.google.cloud.bigquery.JobInfo;
 import com.google.cloud.bigquery.TableId;
+import com.google.cloud.bigquery.TableInfo;
 import com.google.cloud.bigquery.connector.common.BigQueryConfigurationUtil;
 import com.google.cloud.bigquery.connector.common.BigQueryUtil;
 import com.google.common.annotations.VisibleForTesting;
@@ -40,6 +41,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.internal.SQLConf;
+import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.types.Metadata;
 import scala.collection.Iterator;
 
@@ -222,5 +224,28 @@ public class SparkBigQueryUtil {
 
   public static boolean isJson(Metadata metadata) {
     return metadata.contains("sqlType") && "JSON".equals(metadata.getString("sqlType"));
+  }
+
+  public static ImmutableList<Filter> extractPartitionAndClusteringFilters(
+      TableInfo table, ImmutableList<Filter> filters) {
+
+    Optional<String> partitionField = BigQueryUtil.getPartitionField(table);
+    ImmutableList<String> clusteringFields = BigQueryUtil.getClusteringFields(table);
+
+    ImmutableList.Builder<String> filterFields = ImmutableList.builder();
+    partitionField.ifPresent(filterFields::add);
+    filterFields.addAll(clusteringFields);
+
+    return filterFields.build().stream()
+        .flatMap(field -> filtersOnField(filters, field))
+        .collect(ImmutableList.toImmutableList());
+  }
+
+  @VisibleForTesting
+  static Stream<Filter> filtersOnField(ImmutableList<Filter> filters, String field) {
+    return filters.stream()
+        .filter(
+            filter ->
+                Stream.of(filter.references()).anyMatch(reference -> reference.equals(field)));
   }
 }

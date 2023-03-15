@@ -5,12 +5,6 @@
 The connector supports reading [Google BigQuery](https://cloud.google.com/bigquery/) tables into Spark's DataFrames, and writing DataFrames back into BigQuery.
 This is done by using the [Spark SQL Data Source API](https://spark.apache.org/docs/latest/sql-programming-guide.html#data-sources) to communicate with BigQuery.
 
-## Unreleased Changes
-
-This Readme may include documentation for changes that haven't been released yet.  The latest release's documentation and source code are found here.
-
-https://github.com/GoogleCloudDataproc/spark-bigquery-connector/tree/0.24.2
-
 ## BigQuery Storage API
 The [Storage API](https://cloud.google.com/bigquery/docs/reference/storage) streams data in parallel directly from BigQuery via gRPC without using Google Cloud Storage as an intermediary.
 
@@ -36,7 +30,7 @@ There is a known issue in Spark that does not allow pushdown of filters on neste
 
 ### Dynamic Sharding
 
-The API rebalances records between readers until they all complete. This means that all Map phases will finish nearly concurrently. See this blog article on [how dynamic sharding is similarly used in Google Cloud Dataflow](https://cloud.google.com/blog/big-data/2016/05/no-shard-left-behind-dynamic-work-rebalancing-in-google-cloud-dataflow).
+The API rebalances records between readers until they all complete. This means that all Map phases will finish nearly concurrently. See this blog article on [how dynamic sharding is similarly used in Google Cloud Dataflow](https://cloud.google.com/blog/products/gcp/no-shard-left-behind-dynamic-work-rebalancing-in-google-cloud-dataflow).
 
 See [Configuring Partitioning](#configuring-partitioning) for more details.
 
@@ -63,13 +57,15 @@ The latest version of the connector is publicly available in the following links
 
 | version    | Link                                                                                                                                                                                                                   |
 |------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Spark 3.3  | `gs://spark-lib/bigquery/spark-3.3-bigquery-${next-release-tag}-preview.jar`([HTTP link](https://storage.googleapis.com/spark-lib/bigquery/spark-3.3-bigquery-${next-release-tag}-preview.jar))                        |
+| Spark 3.2  | `gs://spark-lib/bigquery/spark-3.2-bigquery-${next-release-tag}-preview.jar`([HTTP link](https://storage.googleapis.com/spark-lib/bigquery/spark-3.2-bigquery-${next-release-tag}-preview.jar))                        |
 | Spark 3.1  | `gs://spark-lib/bigquery/spark-3.1-bigquery-${next-release-tag}-preview.jar`([HTTP link](https://storage.googleapis.com/spark-lib/bigquery/spark-3.1-bigquery-${next-release-tag}-preview.jar))                        |
 | Spark 2.4  | `gs://spark-lib/bigquery/spark-2.4-bigquery-${next-release-tag}-preview.jar`([HTTP link](https://storage.googleapis.com/spark-lib/bigquery/spark-2.4-bigquery-${next-release-tag}-preview.jar))                        |
 | Scala 2.13 | `gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.13-${next-release-tag}.jar` ([HTTP link](https://storage.googleapis.com/spark-lib/bigquery/spark-bigquery-with-dependencies_2.13-${next-release-tag}.jar)) |
 | Scala 2.12 | `gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.12-${next-release-tag}.jar` ([HTTP link](https://storage.googleapis.com/spark-lib/bigquery/spark-bigquery-with-dependencies_2.12-${next-release-tag}.jar)) |
 | Scala 2.11 | `gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.11-${next-release-tag}.jar` ([HTTP link](https://storage.googleapis.com/spark-lib/bigquery/spark-bigquery-with-dependencies_2.11-${next-release-tag}.jar)) |
 
-The first two versions are Java based connectors targeting Spark 2.4/Spark 3.1 of all Scala versions built on the new
+The first four versions are Java based connectors targeting Spark 2.4/3.1/3.2/3.3 of all Scala versions built on the new
 Data Source APIs (Data Source API v2) of Spark. They are still in preview mode.
 
 The final two connectors are Scala based connectors, please use the jar relevant to your Spark installation as outlined
@@ -78,6 +74,8 @@ below.
 ### Connector to Spark Compatibility Matrix
 | Connector \ Spark                     | 2.3     | 2.4<br>(Scala 2.11) | 2.4<br>(Scala 2.12) | 3.0     | 3.1     | 3.2     | 3.3     |
 |---------------------------------------|---------|---------------------|---------------------|---------|---------|---------|---------|
+| spark-3.3-bigquery                    |         |                     |                     |         |         |         | &check; |
+| spark-3.2-bigquery                    |         |                     |                     |         |         | &check; | &check; |
 | spark-3.1-bigquery                    |         |                     |                     |         | &check; | &check; | &check; |
 | spark-2.4-bigquery                    |         | &check;             | &check;             |         |         |         |         |
 | spark-bigquery-with-dependencies_2.13 |         |                     |                     |         |         | &check; | &check; |
@@ -85,13 +83,15 @@ below.
 | spark-bigquery-with-dependencies_2.11 | &check; | &check;             |                     |         |         |         |         |
 
 ### Connector to Dataproc Image Compatibility Matrix
-| Connector \ Dataproc Image            | 1.3     | 1.4     | 1.5     | 2.0     | Serverless<br>Image 1.0 | Serverless<br>Image 2.0 |
-|---------------------------------------|---------|---------|---------|---------|-------------------------|-------------------------|
-| spark-3.1-bigquery                    |         |         |         | &check; | &check;                 | &check;                 |
-| spark-2.4-bigquery                    |         | &check; | &check; |         |                         |                         |
-| spark-bigquery-with-dependencies_2.13 |         |         |         |         |                         | &check;                 |
-| spark-bigquery-with-dependencies_2.12 |         |         | &check; | &check; | &check;                 |                         |
-| spark-bigquery-with-dependencies_2.11 | &check; | &check; |         |         |                         |                         |
+| Connector \ Dataproc Image            | 1.3     | 1.4     | 1.5     | 2.0     | 2.1     | Serverless<br>Image 1.0 | Serverless<br>Image 2.0 |
+|---------------------------------------|---------|---------|---------|---------|---------|-------------------------|-------------------------|
+| spark-3.3-bigquery                    |         |         |         |         | &check; | &check;                 | &check;                 |
+| spark-3.2-bigquery                    |         |         |         |         | &check; | &check;                 | &check;                 |
+| spark-3.1-bigquery                    |         |         |         | &check; | &check; | &check;                 | &check;                 |
+| spark-2.4-bigquery                    |         | &check; | &check; |         |         |                         |                         |
+| spark-bigquery-with-dependencies_2.13 |         |         |         |         |         |                         | &check;                 |
+| spark-bigquery-with-dependencies_2.12 |         |         | &check; | &check; | &check; | &check;                 |                         |
+| spark-bigquery-with-dependencies_2.11 | &check; | &check; |         |         |         |                         |                         |
 
 ### Maven / Ivy Package Usage
 The connector is also available from the
@@ -101,6 +101,8 @@ repository. It can be used using the `--packages` option or the
 
 | version    | Connector Artifact                                                                 |
 |------------|------------------------------------------------------------------------------------|
+| Spark 3.3  | `com.google.cloud.spark:spark-3.3-bigquery:${next-release-tag}-preview`            |
+| Spark 3.2  | `com.google.cloud.spark:spark-3.2-bigquery:${next-release-tag}-preview`            |
 | Spark 3.1  | `com.google.cloud.spark:spark-3.1-bigquery:${next-release-tag}-preview`            |
 | Spark 2.4  | `com.google.cloud.spark:spark-2.4-bigquery:${next-release-tag}-preview`            |
 | Scala 2.13 | `com.google.cloud.spark:spark-bigquery-with-dependencies_2.13:${next-release-tag}` |
@@ -559,7 +561,7 @@ The API Supports a number of options to configure the read
        either "parquet","orc" or "avro". In order to use the Avro format, the
        spark-avro package must be added in runtime.
        <br/>(Optional. Defaults to <code>parquet</code>). On write only.
-       <br/><i>Not supported by the `DIRECT` write method.</i>
+       <br/><i>Supported only by the `spark-bigquery-with-dependencies_2.XX` connectors and just for the `INDIRECT` write method. The `spark-X.Y-bigquery` connectors use only AVRO as an intermediate format.</i>
    </td>
    <td>Write</td>
   </tr>
@@ -900,6 +902,22 @@ When casting to Timestamp TIME have the same TimeZone issues as DATETIME
        </ul>
    </td>
   </tr>
+  <tr valign="top" id="datatype:map">
+   <td><strong><code>ARRAY&lt;STRUCT&lt;key,value&gt;&gt;</code></strong>
+   </td>
+   <td><strong><code>MapType</code></strong>
+   </td>
+   <td>BigQuery has no MAP type, therefore similar to other conversions like Apache Avro and BigQuery Load jobs, the connector converts a Spark Map to a REPEATED STRUCT&lt;key,value&gt;.
+       This means that while writing and reading of maps is available, running a SQL on BigQuery that uses map semantics is not supported.
+       To refer to the map's values using BigQuery SQL, please check the <a href="https://cloud.google.com/bigquery/docs/reference/standard-sql/arrays">BigQuery documentation</a>.
+       Due to these incompatibilities, a few restrictions apply:
+       <ul>
+          <li>Keys can be Strings only</li>
+          <li>Values can be simple types (not structs)</li>
+          <li>For INDIRECT write, use the <code>AVRO</code> intermediate format. DIRECT write is supported as well</li>
+       </ul>
+   </td>
+  </tr>
 </table>
 
 #### Spark ML Data Types Support
@@ -1179,7 +1197,9 @@ spark.read.format("bigquery").option("credentials", "<SERVICE_ACCOUNT_JSON_IN_BA
   [com.google.cloud.bigquery.connector.common.AccessTokenProvider](https://github.com/GoogleCloudDataproc/spark-bigquery-connector/tree/master/bigquery-connector-common/src/main/java/com/google/cloud/bigquery/connector/common/AccessTokenProvider.java)
   interface. The fully qualified class name of the implementation should be provided in the `gcpAccessTokenProvider`
   option. `AccessTokenProvider` must be implemented in Java or other JVM language such as Scala or Kotlin. It must
-  have a no-arg constructor. The jar containing the implementation should be on the cluster's classpath.
+  either have a no-arg constructor or a constructor accepting a single `java.util.String` argument. This configuration
+  parameter can be supplied using the `gcpAccessTokenProviderConfig` option. If this is not provided then the no-arg
+  constructor wil be called. The jar containing the implementation should be on the cluster's classpath.
 ```
 // Globally
 spark.conf.set("gcpAccessTokenProvider", "com.example.ExampleAccessTokenProvider")
@@ -1197,8 +1217,7 @@ spark.read.format("bigquery").option("gcpAccessToken", "<acccess-token>")
 ```
 
 **Important:** The `CredentialsProvider` and  `AccessTokenProvider` need to be implemented in Java or
-other JVM language such as Scala or Kotlin. It must have a no-arg constructor. The jar containing
-the implementation should be on the cluster's classpath.
+other JVM language such as Scala or Kotlin. The jar containing the implementation should be on the cluster's classpath.
 
 **Notice:** Only one of the above options should be provided.
 

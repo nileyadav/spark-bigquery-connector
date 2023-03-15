@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
 import com.google.cloud.bigquery.Field;
+import com.google.cloud.bigquery.Field.Mode;
 import com.google.cloud.bigquery.FieldList;
 import com.google.cloud.bigquery.LegacySQLTypeName;
 import com.google.cloud.bigquery.Schema;
@@ -142,15 +143,6 @@ public class SchemaConverterTest {
   }
 
   @Test
-  public void testSparkMapException() throws Exception {
-    try {
-      createBigQueryColumn(SPARK_MAP_FIELD, 0);
-      fail("Did not throw an error for an unsupported map-type");
-    } catch (IllegalArgumentException e) {
-    }
-  }
-
-  @Test
   public void testDecimalTypeConversion() throws Exception {
     assertThat(toBigQueryType(NUMERIC_SPARK_TYPE, Metadata.empty()))
         .isEqualTo(LegacySQLTypeName.NUMERIC);
@@ -226,6 +218,70 @@ public class SchemaConverterTest {
         .isEqualTo(Optional.of(SQLDataTypes.MatrixType()));
   }
 
+  @Test
+  public void testConvertBigQueryMapToSparkMap_not_repeated() {
+    Optional<StructField> field =
+        SchemaConverters.convertMap(
+            Field.newBuilder("foo", LegacySQLTypeName.INTEGER).setMode(Mode.REQUIRED).build(),
+            Metadata.empty());
+    assertThat(field).isEqualTo(Optional.empty());
+  }
+
+  @Test
+  public void testConvertBigQueryMapToSparkMap_not_record() {
+    Optional<StructField> field =
+        SchemaConverters.convertMap(
+            Field.newBuilder("foo", LegacySQLTypeName.INTEGER).setMode(Mode.REPEATED).build(),
+            Metadata.empty());
+    assertThat(field).isEqualTo(Optional.empty());
+  }
+
+  @Test
+  public void testConvertBigQueryMapToSparkMap_wrong_record_size() {
+    Optional<StructField> field =
+        SchemaConverters.convertMap(
+            Field.newBuilder(
+                    "foo", LegacySQLTypeName.RECORD, Field.of("foo", LegacySQLTypeName.INTEGER))
+                .setMode(Mode.REPEATED)
+                .build(),
+            Metadata.empty());
+    assertThat(field).isEqualTo(Optional.empty());
+  }
+
+  @Test
+  public void testConvertBigQueryMapToSparkMap_wrong_record_fields() {
+    Optional<StructField> field =
+        SchemaConverters.convertMap(
+            Field.newBuilder(
+                    "foo",
+                    LegacySQLTypeName.RECORD,
+                    Field.of("foo", LegacySQLTypeName.INTEGER),
+                    Field.of("bar", LegacySQLTypeName.INTEGER))
+                .setMode(Mode.REPEATED)
+                .build(),
+            Metadata.empty());
+    assertThat(field).isEqualTo(Optional.empty());
+  }
+
+  @Test
+  public void testConvertBigQueryMapToSparkMap_with_actual_map() {
+    Optional<StructField> fieldOpt =
+        SchemaConverters.convertMap(
+            Field.newBuilder(
+                    "foo",
+                    LegacySQLTypeName.RECORD,
+                    Field.of("key", LegacySQLTypeName.INTEGER),
+                    Field.of("value", LegacySQLTypeName.STRING))
+                .setMode(Mode.REPEATED)
+                .build(),
+            Metadata.empty());
+    MapType longToStringMapType = DataTypes.createMapType(DataTypes.LongType, DataTypes.StringType);
+    assertThat(fieldOpt.isPresent()).isTrue();
+    StructField field = fieldOpt.get();
+    assertThat(field.dataType()).isEqualTo(longToStringMapType);
+    assertThat(field.name()).isEqualTo("foo");
+  }
+
   public final StructType MY_STRUCT =
       DataTypes.createStructType(
           new StructField[] {
@@ -254,9 +310,9 @@ public class SchemaConverterTest {
       new StructField("TimeStamp", DataTypes.TimestampType, true, Metadata.empty());
   public final StructField SPARK_MAP_FIELD =
       new StructField(
-          "Map",
-          DataTypes.createMapType(DataTypes.IntegerType, DataTypes.StringType),
-          true,
+          "map_f",
+          DataTypes.createMapType(DataTypes.StringType, DataTypes.LongType),
+          false,
           Metadata.empty());
   public final StructField SPARK_JSON_FIELD =
       new StructField(
@@ -273,7 +329,8 @@ public class SchemaConverterTest {
           .add(SPARK_BINARY_FIELD)
           .add(SPARK_DATE_FIELD)
           .add(SPARK_TIMESTAMP_FIELD)
-          .add(SPARK_JSON_FIELD);
+          .add(SPARK_JSON_FIELD)
+          .add(SPARK_MAP_FIELD);
 
   public final Field BIGQUERY_INTEGER_FIELD =
       Field.newBuilder("Number", LegacySQLTypeName.INTEGER, (FieldList) null)
@@ -324,6 +381,18 @@ public class SchemaConverterTest {
           .setMode(Field.Mode.NULLABLE)
           .build();
 
+  public final Field BIGQUERY_MAP_FIELD =
+      Field.newBuilder(
+              "map_f",
+              LegacySQLTypeName.RECORD,
+              FieldList.of(
+                  Field.newBuilder("key", LegacySQLTypeName.STRING).setMode(Mode.REQUIRED).build(),
+                  Field.newBuilder("value", LegacySQLTypeName.INTEGER)
+                      .setMode(Mode.NULLABLE)
+                      .build()))
+          .setMode(Field.Mode.REPEATED)
+          .build();
+
   public final Schema BIG_BIGQUERY_SCHEMA =
       Schema.of(
           BIGQUERY_INTEGER_FIELD,
@@ -335,7 +404,8 @@ public class SchemaConverterTest {
           BIGQUERY_BYTES_FIELD,
           BIGQUERY_DATE_FIELD,
           BIGQUERY_TIMESTAMP_FIELD,
-          BIGQUERY_JSON_FIELD);
+          BIGQUERY_JSON_FIELD,
+          BIGQUERY_MAP_FIELD);
 
   public final StructType BIG_SPARK_SCHEMA2 =
       new StructType()
@@ -366,7 +436,8 @@ public class SchemaConverterTest {
                               "datetime", DataTypes.StringType, true, Metadata.empty())),
                   true,
                   Metadata.empty()))
-          .add(SPARK_JSON_FIELD);
+          .add(SPARK_JSON_FIELD)
+          .add(SPARK_MAP_FIELD);
 
   public final Schema BIG_BIGQUERY_SCHEMA2 =
       Schema.of(
@@ -387,7 +458,8 @@ public class SchemaConverterTest {
               Field.of("time", LegacySQLTypeName.TIME),
               Field.of("timestamp", LegacySQLTypeName.TIMESTAMP),
               Field.of("datetime", LegacySQLTypeName.DATETIME)),
-          BIGQUERY_JSON_FIELD);
+          BIGQUERY_JSON_FIELD,
+          BIGQUERY_MAP_FIELD);
 
   public final Schema BIG_BIGQUERY_SCHEMA2_WITH_PSEUDO_COLUMNS =
       Schema.of(
@@ -409,6 +481,7 @@ public class SchemaConverterTest {
               Field.of("timestamp", LegacySQLTypeName.TIMESTAMP),
               Field.of("datetime", LegacySQLTypeName.DATETIME)),
           BIGQUERY_JSON_FIELD,
+          BIGQUERY_MAP_FIELD,
           Field.newBuilder("_PARTITIONTIME", LegacySQLTypeName.TIMESTAMP)
               .setMode(Field.Mode.NULLABLE)
               .build(),

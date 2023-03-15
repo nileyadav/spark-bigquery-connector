@@ -33,6 +33,7 @@ import com.google.cloud.bigquery.storage.v1.ReadStream;
 import com.google.cloud.spark.bigquery.ReadRowsResponseToInternalRowIteratorConverter;
 import com.google.cloud.spark.bigquery.SchemaConverters;
 import com.google.cloud.spark.bigquery.SparkBigQueryConfig;
+import com.google.cloud.spark.bigquery.SparkBigQueryUtil;
 import com.google.cloud.spark.bigquery.SparkFilterUtils;
 import com.google.cloud.spark.bigquery.direct.BigQueryRDDFactory;
 import com.google.common.base.Suppliers;
@@ -41,6 +42,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Streams;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,8 +96,10 @@ public class BigQueryDataSourceReaderContext {
   private Optional<StructType> schema;
   private Optional<StructType> userProvidedSchema;
   private Filter[] pushedFilters = new Filter[] {};
+  private Filter[] allFilters = new Filter[] {};
   private Map<String, StructField> fields;
   private Optional<ImmutableList<String>> selectedFields = Optional.empty();
+  private List<ArrowInputPartitionContext> plannedInputPartitionContexts;
   // Lazy loading using Supplier will ensure that createReadSession is called only once and
   // readSessionResponse is cached.
   // Purpose is to create read session either in estimateStatistics or planInputPartitionContexts,
@@ -103,8 +107,7 @@ public class BigQueryDataSourceReaderContext {
   // In Spark 3.1 connector, "estimateStatistics" is called before
   // "planBatchInputPartitionContexts" or
   // "planInputPartitionContexts". We will use this to get table statistics in estimateStatistics.
-  private Supplier<ReadSessionResponse> readSessionResponse =
-      Suppliers.memoize(this::createReadSession);
+  private Supplier<ReadSessionResponse> readSessionResponse;
 
   public BigQueryDataSourceReaderContext(
       TableInfo table,
@@ -146,6 +149,11 @@ public class BigQueryDataSourceReaderContext {
     this.bigQueryRDDFactory =
         new BigQueryRDDFactory(
             bigQueryClient, bigQueryReadClientFactory, bigQueryTracerFactory, options, sqlContext);
+    resetReadSessionResponse();
+  }
+
+  private void resetReadSessionResponse() {
+    this.readSessionResponse = Suppliers.memoize(this::createReadSession);
   }
 
   public StructType readSchema() {
@@ -204,22 +212,27 @@ public class BigQueryDataSourceReaderContext {
               .collect(ImmutableList.toImmutableList());
     }
     ImmutableList<String> partitionSelectedFields = tempSelectedFields;
-    return Streams.stream(
-            Iterables.partition(
-                readSession.getStreamsList(), readSessionCreatorConfig.streamsPerPartition()))
-        .map(
-            streams ->
-                new ArrowInputPartitionContext(
-                    bigQueryReadClientFactory,
-                    bigQueryTracerFactory,
-                    streams.stream()
-                        .map(ReadStream::getName)
-                        // This formulation is used to guarantee a serializable list.
-                        .collect(Collectors.toCollection(ArrayList::new)),
-                    readSessionCreatorConfig.toReadRowsHelperOptions(),
-                    partitionSelectedFields,
-                    readSessionResponse.get(),
-                    userProvidedSchema));
+    Optional<StructType> arrowSchema = Optional.of(userProvidedSchema.orElse(readSchema()));
+    plannedInputPartitionContexts =
+        Streams.stream(
+                Iterables.partition(
+                    readSession.getStreamsList(), readSessionCreatorConfig.streamsPerPartition()))
+            .map(
+                streams ->
+                    new ArrowInputPartitionContext(
+                        bigQueryReadClientFactory,
+                        bigQueryTracerFactory,
+                        streams.stream()
+                            .map(ReadStream::getName)
+                            // This formulation is used to guarantee a serializable list.
+                            .collect(Collectors.toCollection(ArrayList::new)),
+                        readSessionCreatorConfig.toReadRowsHelperOptions(),
+                        partitionSelectedFields,
+                        readSessionResponse.get(),
+                        arrowSchema))
+            .collect(Collectors.toList());
+    return plannedInputPartitionContexts.stream()
+        .map(ctx -> (InputPartitionContext<ColumnarBatch>) ctx);
   }
 
   private boolean isEmptySchema() {
@@ -305,12 +318,81 @@ public class BigQueryDataSourceReaderContext {
         unhandledFilters.add(filter);
       }
     }
+
+    allFilters = filters;
     pushedFilters = handledFilters.stream().toArray(Filter[]::new);
     return unhandledFilters.stream().toArray(Filter[]::new);
   }
 
   public Filter[] pushedFilters() {
     return pushedFilters;
+  }
+
+  public Filter[] getAllFilters() {
+    return allFilters;
+  }
+
+  public void filter(Filter[] filters) {
+    logger.info(String.format("Use Dynamic Partition Pruning runtime filters: %s", filters));
+    if (plannedInputPartitionContexts == null) {
+      logger.error("Should have planned partitions.");
+      return;
+    }
+
+    ImmutableList<Filter> newFilters =
+        SparkBigQueryUtil.extractPartitionAndClusteringFilters(
+            table, ImmutableList.copyOf(filters));
+    if (newFilters.isEmpty()) {
+      // no partitioning and no clustering, this is probably a dimension table.
+      // It means the filter combined filter won't change, so no need to create another read session
+      // we are done here.
+      logger.info(
+          "Could not find filters for partition of clustering field for table {}, aborting DPP filter",
+          BigQueryUtil.friendlyTableName(tableId));
+      return;
+    }
+    pushedFilters =
+        Stream.concat(Arrays.stream(pushedFilters), newFilters.stream()).toArray(Filter[]::new);
+    Optional<String> combinedFilter = getCombinedFilter();
+    if (!BigQueryUtil.filterLengthInLimit(combinedFilter)) {
+      logger.warn(
+          "New filter for Dynamic Partition Pruning is too large, skipping partition pruning");
+      return;
+    }
+
+    // Copies previous planned input partition contexts.
+    List<ArrowInputPartitionContext> previousInputPartitionContexts = plannedInputPartitionContexts;
+    resetReadSessionResponse();
+    // Creates a new read session, this creates a new plannedInputPartitionContexts.
+    planBatchInputPartitionContexts();
+
+    if (plannedInputPartitionContexts.size() > previousInputPartitionContexts.size()) {
+      logger.error(
+          String.format(
+              "New partitions should not be more than originally planned. Previously had %d streams, now has %d.",
+              previousInputPartitionContexts.size(), plannedInputPartitionContexts.size()));
+      return;
+    }
+    logger.info(
+        String.format(
+            "Use Dynamic Partition Pruning, originally planned %d, adjust to %d partitions",
+            previousInputPartitionContexts.size(), plannedInputPartitionContexts.size()));
+
+    // TODO: Spread streams more evenly. This solution reduces the parallelism as it potentially
+    // leaves partitions without streams while other may have more than one stream.
+
+    // first let's update the streams in the previous planned partitions
+    for (int i = 0; i < plannedInputPartitionContexts.size(); i++) {
+      previousInputPartitionContexts
+          .get(i)
+          .resetStreamNamesFrom(plannedInputPartitionContexts.get(i));
+    }
+    // second, clear the redundant partitions
+    for (int i = plannedInputPartitionContexts.size();
+        i < previousInputPartitionContexts.size();
+        i++) {
+      previousInputPartitionContexts.get(i).clearStreamsList();
+    }
   }
 
   public void pruneColumns(StructType requiredSchema) {
@@ -357,5 +439,9 @@ public class BigQueryDataSourceReaderContext {
 
   public BigQueryRDDFactory getBigQueryRddFactory() {
     return this.bigQueryRDDFactory;
+  }
+
+  public TableInfo getTableInfo() {
+    return this.table;
   }
 }

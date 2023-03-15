@@ -16,6 +16,7 @@
 package com.google.cloud.spark.bigquery;
 
 import com.google.cloud.bigquery.Field;
+import com.google.cloud.bigquery.Field.Mode;
 import com.google.cloud.bigquery.FieldList;
 import com.google.cloud.bigquery.LegacySQLTypeName;
 import com.google.cloud.bigquery.Schema;
@@ -51,7 +52,6 @@ public class SchemaConverters {
       DataTypes.createDecimalType(BQ_NUMERIC_PRECISION, BQ_NUMERIC_SCALE);
   // The maximum nesting depth of a BigQuery RECORD:
   static final int MAX_BIGQUERY_NESTED_DEPTH = 15;
-  static final String MAPTYPE_ERROR_MESSAGE = "MapType is unsupported.";
 
   /** Convert a BigQuery schema to a Spark schema */
   public static StructType toSpark(Schema schema) {
@@ -263,17 +263,43 @@ public class SchemaConverters {
       dataType = new ArrayType(dataType, true);
     }
 
-    MetadataBuilder metadata = new MetadataBuilder();
+    MetadataBuilder metadataBuilder = new MetadataBuilder();
     if (field.getDescription() != null) {
-      metadata.putString("description", field.getDescription());
-      metadata.putString("comment", field.getDescription());
+      metadataBuilder.putString("description", field.getDescription());
+      metadataBuilder.putString("comment", field.getDescription());
     }
     // JSON
     if (LegacySQLTypeName.JSON.equals(field.getType())) {
-      metadata.putString("sqlType", "JSON");
+      metadataBuilder.putString("sqlType", "JSON");
     }
 
-    return new StructField(field.getName(), dataType, nullable, metadata.build());
+    Metadata metadata = metadataBuilder.build();
+    return convertMap(field, metadata) //
+        .orElse(new StructField(field.getName(), dataType, nullable, metadata));
+  }
+
+  static Optional<StructField> convertMap(Field field, Metadata metadata) {
+    if (field.getMode() != Field.Mode.REPEATED) {
+      return Optional.empty();
+    }
+    if (field.getType() != LegacySQLTypeName.RECORD) {
+      return Optional.empty();
+    }
+    FieldList subFields = field.getSubFields();
+    if (subFields.size() != 2) {
+      return Optional.empty();
+    }
+    Set<String> subFieldNames = subFields.stream().map(Field::getName).collect(Collectors.toSet());
+    if (!subFieldNames.contains("key") || !subFieldNames.contains("value")) {
+      // no "key" or "value" fields
+      return Optional.empty();
+    }
+    Field key = subFields.get("key");
+    Field value = subFields.get("value");
+    MapType mapType = DataTypes.createMapType(convert(key).dataType(), convert(value).dataType());
+    // The returned type is not nullable because the original field is a REPEATED, not NULLABLE.
+    // There are some compromises we need to do as BigQuery has no native MAP type
+    return Optional.of(new StructField(field.getName(), mapType, /* nullable */ false, metadata));
   }
 
   private static DataType getDataType(Field field) {
@@ -373,6 +399,18 @@ public class SchemaConverters {
     if (sparkType instanceof StructType) {
       subFields = sparkToBigQueryFields((StructType) sparkType, depth + 1);
       fieldType = LegacySQLTypeName.RECORD;
+    } else if (sparkType instanceof MapType) {
+      MapType mapType = (MapType) sparkType;
+      fieldMode = Field.Mode.REPEATED;
+      fieldType = LegacySQLTypeName.RECORD;
+      subFields =
+          FieldList.of(
+              Field.newBuilder("key", toBigQueryType(mapType.keyType(), sparkField.metadata()))
+                  .setMode(Mode.REQUIRED)
+                  .build(),
+              Field.newBuilder("value", toBigQueryType(mapType.valueType(), sparkField.metadata()))
+                  .setMode(mapType.valueContainsNull() ? Mode.NULLABLE : Mode.REQUIRED)
+                  .build());
     } else {
       fieldType = toBigQueryType(sparkType, sparkField.metadata());
     }
@@ -441,11 +479,7 @@ public class SchemaConverters {
     if (elementType instanceof DateType) {
       return LegacySQLTypeName.DATE;
     }
-    if (elementType instanceof MapType) {
-      throw new IllegalArgumentException(MAPTYPE_ERROR_MESSAGE);
-    } else {
-      throw new IllegalArgumentException("Data type not expected: " + elementType.simpleString());
-    }
+    throw new IllegalArgumentException("Data type not expected: " + elementType.simpleString());
   }
 
   private static Field.Builder createBigQueryFieldBuilder(
